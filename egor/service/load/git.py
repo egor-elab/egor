@@ -12,9 +12,11 @@ class GitLoader(RpcProxyLazyLoader):
         self.cluster = cluster
         super().__init__(*initial)
 
-    def load(self, name, bare=True):
+    def load(self, name, bare=True, callback=None):
         super().load(name)
-        eventlet.spawn(self.install_service, name, bare)
+        gt = eventlet.spawn(self.install_service, name, bare)
+        if callback is not None:
+            gt.link(callback)
 
     def install_service(self, name, bare):
         with ClusterRpcProxy({
