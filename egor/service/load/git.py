@@ -1,5 +1,3 @@
-import os
-
 import eventlet
 from nameko.standalone.rpc import ClusterRpcProxy
 
@@ -25,10 +23,10 @@ class GitLoader(RpcProxyLazyLoader):
             if bare:
                 reponame = name + '.git'
             else:
-                reponame = os.path.join(name, '.git')
+                reponame = '/'.join(name, '.git')
             proxy.servicehost.prep(
                 name,
-                os.path.join(self.base_path, reponame)
+                '/'.join(self.base_path, reponame)
             )
             self.resolve(name)
-            self._proxies.append(name)
+            self._proxies_active.add(name)
