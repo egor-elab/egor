@@ -17,8 +17,11 @@ def file_config():
 
 
 def test_install(file_config):
-    loader = GitLoader(file_config['repo_root'], 'amqp://guest:guest@localhost:5672')
-    loader.load('blank')
+    loader = GitLoader(
+        file_config['repo_root'],
+        'amqp://guest:guest@localhost:5672'
+    )
+    loader.load('blank', bare=False)
     assert len(loader.list_pending())
     loader.wait()
 
