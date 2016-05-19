@@ -3,6 +3,7 @@ from nameko.rpc import (
     MethodProxy,
     ServiceProxy,
     ReplyListener,
+    ClusterRpcProxy,
 )
 
 from eventlet.event import Event
@@ -59,6 +60,11 @@ class LazyRpcProxy(DependencyProvider):
             self.target_service,
             self.rpc_reply_listener
         )
+
+    def stop(self):
+        with ClusterRpcProxy(self.container.config) as cluster:
+            getattr(cluster, self.target_service).down()
+        self.container.stop()
 
 
 class RpcProxyLazyLoader:
