@@ -3,8 +3,8 @@ from nameko.rpc import (
     MethodProxy,
     ServiceProxy,
     ReplyListener,
-    ClusterRpcProxy,
 )
+from nameko.standalone.rpc import ClusterRpcProxy
 
 from eventlet.event import Event
 
