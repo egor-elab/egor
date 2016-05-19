@@ -69,8 +69,8 @@ class RpcProxyLazyLoader:
             self.load(name)
 
     def load(self, name):
-        print('initiating lazy load of {}'.format(name))
         self._proxies_pending[name] = Event()
+        return self._proxies_pending[name]
 
     def resolve(self, name):
         self._proxies_pending[name].send()

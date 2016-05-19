@@ -10,23 +10,15 @@ class GitLoader(RpcProxyLazyLoader):
         self.cluster = cluster
         super().__init__(*initial)
 
-    def load(self, name, bare=True, callback=None):
+    def load(self, name, uri=None):
         super().load(name)
-        gt = eventlet.spawn(self.install_service, name, bare)
-        if callback is not None:
-            gt.link(callback)
+        if uri is None:
+            uri = '/'.join((self.base_path, name + '.git'))
+        return eventlet.spawn(self.install_service, name, uri)
 
-    def install_service(self, name, bare):
+    def install_service(self, name, uri):
         with ClusterRpcProxy({
             'AMQP_URI': self.cluster
         }) as proxy:
-            if bare:
-                reponame = name + '.git'
-            else:
-                reponame = '/'.join((name, '.git'))
-            proxy.servicehost.prep(
-                name,
-                '/'.join((self.base_path, reponame))
-            )
+            proxy.servicehost.prep(name, uri)
             self.resolve(name)
-            self._proxies_active.add(name)
