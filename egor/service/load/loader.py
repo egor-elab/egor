@@ -79,9 +79,14 @@ class RpcProxyLazyLoader:
     def get(self, name):
         return LazyRpcProxy(name, self._proxies_pending[name])
 
-    def wait(self):
-        for event in self._proxies_pending.values():
-            event.wait()
+    def wait(self, key=None):
+        if key is not None:
+            self._proxies_pending[key].wait()
+            self._proxies_pending.pop(key)
+        else:
+            for key, event in self._proxies_pending.items():
+                event.wait()
+                self._proxies_pending.pop(key)
 
     def list_pending(self):
         return set(self._proxies_pending.keys()) - self._proxies_active
