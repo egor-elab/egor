@@ -1,4 +1,7 @@
+import logging
 import pytest
+import sys
+
 from nameko.rpc import rpc
 from nameko.testing.utils import get_container
 from nameko.testing.services import entrypoint_hook
@@ -6,7 +9,11 @@ from nameko.testing.services import entrypoint_hook
 from egor.service.load.loader import (
     RpcProxyLazyLoader,
     DependencyNotLoadedError,
+    InjectableLazyLoader,
 )
+
+
+logging.basicConfig(level=logging.WARNING, stream=sys.stdout)
 
 
 class DependencyOne:
@@ -25,25 +32,33 @@ class DependencyTwo:
         return 'there'
 
 
-loader = RpcProxyLazyLoader('dependency1', 'dependency2')
+loader = RpcProxyLazyLoader('dependency1')
 
 
 class ServiceWithLazyLoadedDependencies:
     name = 'lazydeps'
     dependency1 = loader.get('dependency1')
-    dependency2 = loader.get('dependency2')
-
-    @rpc
-    def resolve(self, which):
-        loader.resolve(which)
+    loaded_deps = InjectableLazyLoader(loader)
 
     @rpc
     def load(self, which):
         loader.load(which)
 
     @rpc
+    def resolve(self, which):
+        loader.resolve(which)
+
+    @rpc
+    def call_1(self):
+        return self.dependency1.hello()
+
+    @rpc
     def call(self, which):
-        return getattr(self, which).hello()
+        return self.loaded_deps[which].hello()
+
+    @rpc
+    def wait(self):
+        loader.wait()
 
 
 class NeighborService:
@@ -66,26 +81,30 @@ def runner(rabbit_config, runner_factory):
     yield runner
 
 
+def with_helper(ct, ep, *args):
+    with entrypoint_hook(ct, ep) as entrypoint:
+        return entrypoint(*args)
+
+
 def test_loader(runner):
+#    caplog.setLevel(logging.WARNING)
     container = get_container(runner, ServiceWithLazyLoadedDependencies)
 
-    with entrypoint_hook(container, 'resolve') as entrypoint:
-        entrypoint('dependency1')
-    with entrypoint_hook(container, 'call') as entrypoint:
-        assert entrypoint('dependency1') == 'world'
+    with entrypoint_hook(container, 'call_1') as entrypoint:
         with pytest.raises(DependencyNotLoadedError):
-            entrypoint('dependency2')
+            entrypoint()
 
-    with entrypoint_hook(container, 'resolve') as entrypoint:
-        entrypoint('dependency2')
-    with entrypoint_hook(container, 'call') as entrypoint:
-        assert entrypoint('dependency2') == 'there'
+    with_helper(container, 'resolve', 'dependency1')
+    assert with_helper(container, 'call_1') == 'world'
 
-    container = get_container(runner, NeighborService)
-    with entrypoint_hook(container, 'call') as entrypoint:
-        assert entrypoint() == 'world'
+    with_helper(container, 'load', 'dependency2')
+    with_helper(container, 'resolve', 'dependency2')
+    with_helper(container, 'wait')
+    # assert with_helper(container, 'call', 'dependency2') == 'there'
 
-    loader.wait()
+    # container = get_container(runner, NeighborService)
+    # assert with_helper(container, 'call') == 'world'
+
     assert all(e.ready() for e in loader._proxies_pending.values())
     assert not len(loader.list_pending())
     assert len(loader.list_active())

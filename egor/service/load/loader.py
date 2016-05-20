@@ -19,6 +19,8 @@ class LazyMethodProxy(MethodProxy):
         self._loaded = loaded
 
     def __call__(self, *args, **kwargs):
+        print(self._loaded)
+#        import pdb; pdb.set_trace()
         if not self._loaded.ready():
             raise DependencyNotLoadedError
         return super().__call__(*args, **kwargs)
@@ -42,8 +44,8 @@ class LazyServiceProxy(ServiceProxy):
             self.reply_listener
         )
 
-    def load_complete(self):
-        self._loaded.send()
+    # def load_complete(self):
+    #     self._loaded.send()
 
 
 class LazyRpcProxy(DependencyProvider):
@@ -61,11 +63,6 @@ class LazyRpcProxy(DependencyProvider):
             self.rpc_reply_listener
         )
 
-    def stop(self):
-        with ClusterRpcProxy(self.container.config) as cluster:
-            getattr(cluster, self.target_service).down()
-        self.container.stop()
-
 
 class RpcProxyLazyLoader:
     def __init__(self, *initial):
@@ -76,9 +73,11 @@ class RpcProxyLazyLoader:
 
     def load(self, name):
         self._proxies_pending[name] = Event()
+        print('created event {}'.format(self._proxies_pending[name]))
         return self._proxies_pending[name]
 
     def resolve(self, name):
+        print('resolving event {}'.format(self._proxies_pending[name]))
         self._proxies_pending[name].send()
         self._proxies_active.add(name)
 
@@ -88,14 +87,23 @@ class RpcProxyLazyLoader:
     def wait(self, key=None):
         if key is not None:
             self._proxies_pending[key].wait()
-            self._proxies_pending.pop(key)
         else:
             for key, event in self._proxies_pending.items():
                 event.wait()
-                self._proxies_pending.pop(key)
 
     def list_pending(self):
         return set(self._proxies_pending.keys()) - self._proxies_active
 
     def list_active(self):
         return self._proxies_active
+
+
+class InjectableLazyLoader(DependencyProvider):
+    def __init__(self, loader):
+        self.loader = loader
+
+    def get_dependency(self, worker_ctx):
+        return {
+            name: self.loader.get(name).get_dependency(worker_ctx)
+            for name in self.loader._proxies_active
+        }
